@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas Acadêmico – Diretório de Universidades</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">Atlas Acadêmico<small>Seu diretório de universidades</small></div>
+    <nav class="nav" aria-label="Navegação principal">
+      <a href="#inicio" data-nav="inicio">Início</a>
+      <a href="#buscar" data-nav="buscar">Buscar universidades</a>
+      <a href="#cadastro" data-nav="cadastro">Cadastrar</a>
+      <a href="#minhas" data-nav="minhas">Minha lista</a>
+    </nav>
+    <div class="counter"><strong id="count">0</strong>universidades salvas</div>
+  </aside>
+
+  <main>
+    <!-- INÍCIO -->
+    <section class="view" id="inicio">
+      <h2>Organize as universidades que você quer conhecer</h2>
+      <p class="lead">Pesquise instituições de qualquer país, salve as que interessam e acompanhe cada uma com status, site oficial e observações. A pesquisa usa a API pública Hipolabs; a sua lista fica guardada no Firestore.</p>
+      <div class="row">
+        <div class="panel"><h3>1. Buscar</h3><p class="meta">Filtre por país e nome. Os resultados vêm da API Hipolabs.</p><div class="actions"><a href="#buscar"><button type="button">Ir para a busca</button></a></div></div>
+        <div class="panel"><h3>2. Salvar ou cadastrar</h3><p class="meta">Salve um resultado com um clique ou cadastre uma universidade manualmente.</p><div class="actions"><a href="#cadastro"><button type="button" class="ghost">Cadastrar</button></a></div></div>
+        <div class="panel"><h3>3. Acompanhar</h3><p class="meta">Edite status e observações, pesquise na lista e exclua o que não interessa mais.</p><div class="actions"><a href="#minhas"><button type="button" class="ghost">Ver minha lista</button></a></div></div>
+      </div>
+    </section>
+
+    <!-- BUSCA NA API -->
+    <section class="view" id="buscar">
+      <h2>Buscar universidades</h2>
+      <p class="lead">Informe o país em inglês (por exemplo Brazil, Portugal, Canada) e, se quiser, parte do nome da instituição.</p>
+      <form class="panel" id="form-busca" novalidate>
+        <div class="row">
+          <div class="field"><label for="b-pais">País</label><input id="b-pais" placeholder="Ex.: Brazil" required></div>
+          <div class="field"><label for="b-nome">Nome da universidade (opcional)</label><input id="b-nome" placeholder="Ex.: Sao Paulo"></div>
+        </div>
+        <div class="err" id="b-erro"></div>
+        <div class="actions"><button type="submit">Buscar</button></div>
+      </form>
+      <div class="state" id="b-estado" role="status"></div>
+      <div class="list" id="b-resultados"></div>
+    </section>
+
+    <!-- CADASTRO / EDIÇÃO -->
+    <section class="view" id="cadastro">
+      <h2 id="c-titulo">Cadastrar universidade</h2>
+      <p class="lead">Preencha os dados da instituição. Os campos com asterisco são obrigatórios.</p>
+      <form class="panel" id="form-cad" novalidate>
+        <input type="hidden" id="c-id">
+        <div class="row">
+          <div class="field"><label for="c-nome">Nome *</label><input id="c-nome" required><div class="err" data-err="c-nome"></div></div>
+          <div class="field"><label for="c-pais">País *</label><input id="c-pais" required><div class="err" data-err="c-pais"></div></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="c-site">Site oficial *</label><input id="c-site" type="url" placeholder="https://..." required><div class="err" data-err="c-site"></div></div>
+          <div class="field"><label for="c-dominio">Domínio</label><input id="c-dominio" placeholder="exemplo.edu"></div>
+          <div class="field"><label for="c-status">Status</label>
+            <select id="c-status">
+              <option value="Quero conhecer">Quero conhecer</option>
+              <option value="Em análise">Em análise</option>
+              <option value="Candidatura enviada">Candidatura enviada</option>
+              <option value="Descartada">Descartada</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label for="c-obs">Observações</label><textarea id="c-obs" placeholder="Cursos, bolsas, prazos..."></textarea></div>
+        <div class="actions">
+          <button type="submit" id="c-salvar">Salvar universidade</button>
+          <button type="button" class="ghost" id="c-cancelar" hidden>Cancelar edição</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- LISTA (READ / UPDATE / DELETE) -->
+    <section class="view" id="minhas">
+      <h2>Minha lista</h2>
+      <p class="lead">Tudo o que você salvou, atualizado em tempo real.</p>
+      <div class="toolbar">
+        <input id="f-texto" type="search" placeholder="Pesquisar por nome, país ou domínio" aria-label="Pesquisar na lista">
+        <select id="f-status" aria-label="Filtrar por status">
+          <option value="">Todos os status</option>
+          <option>Quero conhecer</option><option>Em análise</option><option>Candidatura enviada</option><option>Descartada</option>
+        </select>
+      </div>
+      <div class="state" id="m-estado" role="status"></div>
+      <div class="list" id="m-lista"></div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* Configuração do projeto Firebase nuvem2-joao */
+const firebaseConfig = {
+  apiKey: "AIzaSyCqgP6XHZF21AQODqkFg95XEAOCcB6swYQ",
+  authDomain: "nuvem2-joao.firebaseapp.com",
+  projectId: "nuvem2-joao",
+  storageBucket: "nuvem2-joao.firebasestorage.app",
+  messagingSenderId: "822126030970",
+  appId: "1:822126030970:web:a85b2cc06156b95c6a8bc3"
+};
+
+const db = getFirestore(initializeApp(firebaseConfig));
+const col = collection(db, "universidades");
+const API = "https://universities.hipolabs.com/search";
+
+/* ---------- Estado global ---------- */
+const state = { salvas: [], resultados: [] };
+
+/* ---------- Utilidades ---------- */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const norm = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+const chipClass = (s) => ({ "Em análise":"s-analise", "Candidatura enviada":"s-candidatura", "Descartada":"s-descartada" }[s] || "");
+function toast(msg, bad = false) {
+  const t = $("toast"); t.textContent = msg; t.className = "toast show" + (bad ? " bad" : "");
+  clearTimeout(toast.t); toast.t = setTimeout(() => (t.className = "toast"), 3200);
+}
+
+/* ---------- Roteamento SPA ---------- */
+function rotear() {
+  const id = (location.hash || "#inicio").slice(1);
+  const alvo = document.getElementById(id) && document.getElementById(id).classList.contains("view") ? id : "inicio";
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === alvo));
+  document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === alvo));
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", rotear);
+rotear();
+
+/* ---------- API externa (Hipolabs) ---------- */
+$("form-busca").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const pais = $("b-pais").value.trim(), nome = $("b-nome").value.trim();
+  $("b-erro").textContent = "";
+  if (!pais) { $("b-erro").textContent = "Informe o país para buscar."; return; }
+  const url = `${API}?country=${encodeURIComponent(pais)}` + (nome ? `&name=${encodeURIComponent(nome)}` : "");
+  $("b-estado").textContent = "Buscando universidades...";
+  $("b-resultados").innerHTML = "";
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    state.resultados = await resp.json();
+    renderResultados();
+  } catch (err) {
+    console.error(err);
+    state.resultados = [];
+    $("b-estado").textContent = "Não foi possível consultar a API agora. Verifique sua conexão e tente novamente.";
+  }
+});
+
+function renderResultados() {
+  const r = state.resultados;
+  if (!r.length) { $("b-estado").textContent = "Nenhuma universidade encontrada. Confira o país (em inglês) e o nome."; $("b-resultados").innerHTML = ""; return; }
+  $("b-estado").textContent = `${r.length} resultado(s) encontrado(s).`;
+  $("b-resultados").innerHTML = r.slice(0, 100).map((u, i) => {
+    const site = (u.web_pages && u.web_pages[0]) || "";
+    const jaSalva = state.salvas.some((s) => norm(s.nome) === norm(u.name) && norm(s.pais) === norm(u.country));
+    return `<article class="item">
+      <div><h3>${esc(u.name)}</h3>
+      <div class="meta">${esc(u.country)}${u["state-province"] ? " · " + esc(u["state-province"]) : ""}${site ? ` · <a href="${esc(site)}" target="_blank" rel="noopener">${esc(site)}</a>` : ""}</div></div>
+      <div class="btns"><button type="button" data-salvar="${i}" ${jaSalva ? "disabled" : ""}>${jaSalva ? "Já salva" : "Salvar na lista"}</button></div>
+    </article>`;
+  }).join("");
+}
+
+$("b-resultados").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-salvar]"); if (!b) return;
+  const u = state.resultados[Number(b.dataset.salvar)];
+  b.disabled = true;
+  try {
+    await addDoc(col, {
+      nome: u.name, pais: u.country, site: (u.web_pages && u.web_pages[0]) || "",
+      dominio: (u.domains && u.domains[0]) || "", status: "Quero conhecer", observacoes: "",
+      origem: "api", criadoEm: serverTimestamp()
+    });
+    toast("Universidade salva na sua lista.");
+  } catch (err) { console.error(err); b.disabled = false; toast("Erro ao salvar. Veja o console.", true); }
+});
+
+/* ---------- CRUD: Create / Update ---------- */
+function validar() {
+  let ok = true;
+  const set = (id, msg) => { document.querySelector(`[data-err="${id}"]`).textContent = msg; if (msg) ok = false; };
+  set("c-nome", $("c-nome").value.trim().length < 3 ? "Informe o nome (mínimo 3 caracteres)." : "");
+  set("c-pais", $("c-pais").value.trim().length < 2 ? "Informe o país." : "");
+  let siteOk = true; try { const u = new URL($("c-site").value.trim()); siteOk = /^https?:$/.test(u.protocol); } catch { siteOk = false; }
+  set("c-site", siteOk ? "" : "Informe um endereço válido, começando com http:// ou https://.");
+  return ok;
+}
+
+$("form-cad").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!validar()) return;
+  const dados = {
+    nome: $("c-nome").value.trim(), pais: $("c-pais").value.trim(), site: $("c-site").value.trim(),
+    dominio: $("c-dominio").value.trim(), status: $("c-status").value, observacoes: $("c-obs").value.trim()
+  };
+  const id = $("c-id").value;
+  $("c-salvar").disabled = true;
+  try {
+    if (id) { await updateDoc(doc(db, "universidades", id), { ...dados, atualizadoEm: serverTimestamp() }); toast("Universidade atualizada."); }
+    else { await addDoc(col, { ...dados, origem: "manual", criadoEm: serverTimestamp() }); toast("Universidade cadastrada."); }
+    limparForm();
+    location.hash = "#minhas";
+  } catch (err) { console.error(err); toast("Erro ao salvar. Confira a configuração do Firebase.", true); }
+  finally { $("c-salvar").disabled = false; }
+});
+
+function limparForm() {
+  $("form-cad").reset(); $("c-id").value = "";
+  $("c-titulo").textContent = "Cadastrar universidade";
+  $("c-salvar").textContent = "Salvar universidade";
+  $("c-cancelar").hidden = true;
+  document.querySelectorAll("[data-err]").forEach((d) => (d.textContent = ""));
+}
+$("c-cancelar").addEventListener("click", () => { limparForm(); location.hash = "#minhas"; });
+
+/* ---------- CRUD: Read (tempo real) ---------- */
+onSnapshot(query(col, orderBy("criadoEm", "desc")), (snap) => {
+  state.salvas = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  $("count").textContent = state.salvas.length;
+  renderLista();
+  if (state.resultados.length) renderResultados();
+}, (err) => {
+  console.error(err);
+  $("m-estado").textContent = "Não foi possível carregar a lista. Confira a configuração e as regras do Firestore.";
+});
+
+function renderLista() {
+  const t = norm($("f-texto").value), st = $("f-status").value;
+  const itens = state.salvas.filter((u) =>
+    (!st || u.status === st) && (!t || norm(`${u.nome} ${u.pais} ${u.dominio}`).includes(t)));
+  $("m-estado").textContent = state.salvas.length ? `${itens.length} de ${state.salvas.length} universidade(s).` : "";
+  if (!itens.length) {
+    $("m-lista").innerHTML = `<div class="empty">${state.salvas.length ? "Nenhuma universidade corresponde ao filtro." : "Sua lista está vazia. Busque uma universidade ou faça um cadastro manual."}</div>`;
+    return;
+  }
+  $("m-lista").innerHTML = itens.map((u) => `
+    <article class="item">
+      <div>
+        <h3>${esc(u.nome)}</h3>
+        <div class="meta"><span class="chip ${chipClass(u.status)}">${esc(u.status)}</span>${esc(u.pais)}${u.site ? ` · <a href="${esc(u.site)}" target="_blank" rel="noopener">${esc(u.site)}</a>` : ""}${u.dominio ? " · " + esc(u.dominio) : ""}</div>
+        ${u.observacoes ? `<div class="note">${esc(u.observacoes)}</div>` : ""}
+      </div>
+      <div class="btns">
+        <button type="button" class="ghost" data-editar="${esc(u.id)}">Editar</button>
+        <button type="button" class="danger" data-excluir="${esc(u.id)}">Excluir</button>
+      </div>
+    </article>`).join("");
+}
+$("f-texto").addEventListener("input", renderLista);
+$("f-status").addEventListener("change", renderLista);
+
+/* ---------- CRUD: Delete + abrir edição ---------- */
+$("m-lista").addEventListener("click", async (e) => {
+  const ed = e.target.closest("[data-editar]"), ex = e.target.closest("[data-excluir]");
+  if (ed) {
+    const u = state.salvas.find((x) => x.id === ed.dataset.editar); if (!u) return;
+    $("c-id").value = u.id; $("c-nome").value = u.nome || ""; $("c-pais").value = u.pais || "";
+    $("c-site").value = u.site || ""; $("c-dominio").value = u.dominio || "";
+    $("c-status").value = u.status || "Quero conhecer"; $("c-obs").value = u.observacoes || "";
+    $("c-titulo").textContent = "Editar universidade";
+    $("c-salvar").textContent = "Salvar alterações";
+    $("c-cancelar").hidden = false;
+    location.hash = "#cadastro";
+  }
+  if (ex) {
+    const u = state.salvas.find((x) => x.id === ex.dataset.excluir); if (!u) return;
+    if (!confirm(`Excluir "${u.nome}" da sua lista?`)) return;
+    try { await deleteDoc(doc(db, "universidades", u.id)); toast("Universidade excluída."); }
+    catch (err) { console.error(err); toast("Erro ao excluir.", true); }
+  }
+});
+</script>
+</body>
+</html>
